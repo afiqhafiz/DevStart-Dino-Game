@@ -19,8 +19,8 @@
         <p class="session-label">DevStart 2026</p>
         <h1>Dino Run</h1>
         <p>
-          Jump over the field rocks, duck under the pterodactyls, grab the golden eggs and keep
-          the expedition moving.
+          Jump over the field rocks, duck under the pterodactyls, grab the golden eggs and catch
+          a star to become a giant for a few seconds.
         </p>
       </header>
 
@@ -54,7 +54,7 @@
           <div class="hills hills-far" aria-hidden="true"></div>
           <div class="hills hills-near" aria-hidden="true"></div>
 
-          <!-- JavaScript adds rocks, cacti, logs and eggs inside this box. -->
+          <!-- JavaScript adds rocks, cacti, logs, eggs and stars inside this box. -->
           <div id="obstacles"></div>
 
           <div class="dino" id="dino" aria-label="Dinosaur">🦖</div>
@@ -62,11 +62,18 @@
 
           <p class="toast" id="toast" aria-hidden="true"></p>
 
+          <!-- Shows how much power-up time is left. JavaScript sets the fill width. -->
+          <div class="power-meter" id="power-meter" hidden>
+            <span>⭐ Power</span>
+            <div class="power-bar"><div class="power-fill" id="power-fill"></div></div>
+          </div>
+
           <div class="overlay" id="overlay">
             <div class="overlay-panel">
               <h3 id="overlay-title">Ready to run?</h3>
               <p id="overlay-text">
-                Space or ↑ to jump, hold ↓ to duck under 🦅. Grab 🥚 for +25 points.
+                Space or ↑ to jump, hold ↓ to duck under 🦅. Grab 🥚 for +25 points. Jump
+                over a 🦅 carrying a ⭐ to become a giant.
               </p>
               <button id="overlay-button" type="button">Start game</button>
             </div>
@@ -94,6 +101,29 @@
             🔊
           </button>
         </div>
+      </section>
+
+      <section class="leaderboard" aria-labelledby="leaderboard-title">
+        <div class="leaderboard-header">
+          <h2 id="leaderboard-title">Your top 5 runs</h2>
+          <p>Saved in this browser</p>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th scope="col">Rank</th>
+              <th scope="col">Score</th>
+              <th scope="col">Level</th>
+              <th scope="col">Time</th>
+              <th scope="col">Date</th>
+            </tr>
+          </thead>
+          <!-- JavaScript fills in one row per saved run. -->
+          <tbody id="leaderboard-body"></tbody>
+        </table>
+        <p class="leaderboard-empty" id="leaderboard-empty">
+          No runs yet. Play a round to set your first score.
+        </p>
       </section>
     </main>
   </body>

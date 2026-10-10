@@ -335,6 +335,7 @@ h1 {
   /* Scale and rotate from the feet so the dinosaur stays on the ground. */
   transform-origin: 50% 100%;
   filter: drop-shadow(0 4px 0 rgba(0, 0, 0, 0.25));
+  transition: scale 0.25s ease;
 }
 
 /* A small bounce while running on the ground. */
@@ -354,6 +355,19 @@ h1 {
 
 .is-running .dino.is-ducking {
   animation: duck-run 0.3s steps(2) infinite;
+}
+
+/* Power-up: 1.5 times bigger with a golden glow. `scale` is separate from
+   `transform`, so it works together with the jump and duck poses. The bigger
+   box also means a bigger hitbox, which is how it smashes obstacles. */
+.dino.is-powered {
+  scale: 1.5;
+  filter: drop-shadow(0 0 8px #ffd86b) drop-shadow(0 4px 0 rgba(0, 0, 0, 0.25));
+}
+
+/* Blink when the power is about to run out. */
+.is-running .dino.is-power-ending {
+  animation: blink 0.18s steps(2) infinite;
 }
 
 .dino.is-hit {
@@ -382,8 +396,57 @@ h1 {
   animation: flap 0.3s steps(2) infinite;
 }
 
+/* The star glows and spins slowly so it stands out against the sky. */
+.item.powerup {
+  filter: drop-shadow(0 0 10px #fff3a8);
+}
+
+.item.powerup span {
+  animation: spin 1.6s linear infinite;
+}
+
+/* A smashed obstacle flies up and away. */
+.item.is-smashed span {
+  animation: smashed 0.5s ease-in forwards;
+}
+
 .item.is-hit {
   filter: drop-shadow(0 0 12px #ff3b3b);
+}
+
+/* Power-up timer in the top-left corner of the stage. */
+.power-meter {
+  position: absolute;
+  top: 18px;
+  left: 18px;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--panel);
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.power-meter[hidden] {
+  display: none;
+}
+
+.power-bar {
+  width: 90px;
+  height: 8px;
+  overflow: hidden;
+  border-radius: 4px;
+  background: var(--border);
+}
+
+.power-fill {
+  width: 100%;
+  height: 100%;
+  background: var(--accent);
 }
 
 /* "+25" floats up and fades when an egg is collected. */
@@ -461,6 +524,84 @@ h1 {
 /* The whole stage shakes after a crash. */
 .game-stage.is-shaking {
   animation: shake 0.4s;
+}
+
+/* ---------- Personal scoreboard ---------- */
+
+.leaderboard {
+  margin-top: 24px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-large);
+  background: var(--card);
+}
+
+.leaderboard-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border);
+}
+
+.leaderboard-header h2 {
+  margin-bottom: 0;
+  font-size: 1.15rem;
+}
+
+.leaderboard-header p {
+  margin-bottom: 0;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.leaderboard table {
+  width: 100%;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+
+.leaderboard th,
+.leaderboard td {
+  padding: 10px 18px;
+  text-align: left;
+}
+
+.leaderboard th {
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* Row dividers between runs. */
+.leaderboard tbody tr {
+  border-top: 1px solid var(--border);
+}
+
+/* The best score stands out in the accent colour. */
+.leaderboard tbody tr:first-child td:nth-child(2) {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+/* The run that just finished gets a marker on the left. */
+.leaderboard tr.is-new {
+  background: var(--panel);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.leaderboard-empty {
+  margin: 0;
+  padding: 16px 18px;
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+}
+
+.leaderboard-empty[hidden] {
+  display: none;
 }
 
 /* ---------- Controls ---------- */
@@ -544,6 +685,18 @@ button:focus-visible {
   50% { transform: translateY(-4px) scaleY(0.8); }
 }
 
+@keyframes blink {
+  50% { opacity: 0.35; }
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes smashed {
+  to { opacity: 0; transform: translate(60px, -90px) rotate(220deg); }
+}
+
 @keyframes bob {
   to { transform: translateY(-8px); }
 }
@@ -598,6 +751,12 @@ button:focus-visible {
     height: 260px;
   }
 
+  /* Less padding so all five scoreboard columns fit on a phone. */
+  .leaderboard th,
+  .leaderboard td {
+    padding: 10px 10px;
+  }
+
   .dino {
     width: 64px;
     height: 56px;
@@ -611,6 +770,8 @@ button:focus-visible {
   .sky-night::before,
   .item.egg span,
   .item.flyer span,
+  .item.powerup span,
+  .is-running .dino.is-power-ending,
   .is-running .dino:not(.is-jumping, .is-ducking),
   .is-running .dino.is-ducking,
   .game-stage.is-shaking {
