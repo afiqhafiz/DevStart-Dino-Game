@@ -116,7 +116,8 @@ h1 {
 /* ---------- The game stage ---------- */
 
 /* Relative positioning makes this the reference box for the game objects.
-   JavaScript updates --scroll as the dinosaur runs. */
+   --scroll starts at 0 here; JavaScript updates it on the ground and hills
+   as the dinosaur runs. */
 .game-stage {
   --scroll: 0;
   position: relative;
@@ -443,10 +444,12 @@ h1 {
   background: var(--border);
 }
 
+/* JavaScript shrinks the fill with transform: scaleX(), anchored on the left. */
 .power-fill {
   width: 100%;
   height: 100%;
   background: var(--accent);
+  transform-origin: left;
 }
 
 /* "+25" floats up and fades when an egg is collected. */
@@ -525,8 +528,6 @@ h1 {
 .game-stage.is-shaking {
   animation: shake 0.4s;
 }
-
-/* ---------- Personal scoreboard ---------- */
 
 .leaderboard {
   margin-top: 24px;
@@ -656,7 +657,6 @@ button:focus-visible {
   background: var(--panel);
 }
 
-/* Hold-to-duck button for touch screens. Stop long-press menus and text selection. */
 .duck-button {
   touch-action: none;
   user-select: none;
@@ -664,7 +664,6 @@ button:focus-visible {
   -webkit-touch-callout: none;
 }
 
-/* With a mouse and keyboard you can use ↓, so hide the button there. */
 @media (hover: hover) and (pointer: fine) {
   .duck-button {
     display: none;
@@ -731,7 +730,6 @@ button:focus-visible {
   80% { translate: 3px 0; }
 }
 
-/* Stack the controls when there is not enough horizontal space. */
 @media (max-width: 620px) {
   .scoreboard {
     align-items: flex-start;
@@ -751,7 +749,6 @@ button:focus-visible {
     height: 260px;
   }
 
-  /* Less padding so all five scoreboard columns fit on a phone. */
   .leaderboard th,
   .leaderboard td {
     padding: 10px 10px;
@@ -764,7 +761,6 @@ button:focus-visible {
   }
 }
 
-/* Respect people who ask their device for less motion. */
 @media (prefers-reduced-motion: reduce) {
   .cloud,
   .sky-night::before,

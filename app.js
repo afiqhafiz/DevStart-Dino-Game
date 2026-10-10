@@ -19,6 +19,9 @@ const powerFill = document.querySelector("#power-fill");
 const leaderboardBody = document.querySelector("#leaderboard-body");
 const leaderboardEmpty = document.querySelector("#leaderboard-empty");
 
+// The layers that scroll with the ground (they read the --scroll CSS variable).
+const scrollLayers = stage.querySelectorAll(".ground, .hills");
+
 // Game settings. Change these numbers to make the game easier or harder.
 const groundHeight = 42;
 const gravity = 2100;
@@ -73,11 +76,24 @@ const powerUp = {
   duration: 6, // seconds of being big and unstoppable
   warningTime: 1.5, // the dinosaur blinks when the power is about to run out
   graceTime: 0.6, // short safety window after the power ends
+  reach: 6, // how many pixels of the top of a perfect jump reach the star
 };
 const smashBonus = 10;
 
 // Holding down while in the air pulls the dinosaur back to the ground faster.
 const fastFallMultiplier = 3;
+
+// Hitboxes. Emoji have empty space around them, so each box is shrunk by this
+// fraction of its size on every side before checking for a crash.
+const insets = { dino: 0.24, hazard: 0.2, pickup: 0.1 };
+
+// How the CSS reshapes the dinosaur. These must match styles.css:
+// .dino.is-ducking (scaleX/scaleY) and .dino.is-powered (scale).
+const duckScale = { x: 1.15, y: 0.55 };
+const powerScale = 1.5;
+
+// Space between a ducking dinosaur's head and a head-height pterodactyl.
+const birdClearance = 10;
 
 // Each level changes the sky: day, then sunset, then night, then day again.
 const phases = ["day", "sunset", "night"];
@@ -108,10 +124,19 @@ let powerTimeLeft = 0;
 let graceTimeLeft = 0;
 let lastPowerUpScore = -Infinity;
 
-// Every obstacle on screen is stored here as { el, x, width, kind, name }.
+// Every obstacle on screen is stored here as { el, x, width, bottom, kind, name }.
 let obstacles = [];
 let distanceToNextSpawn = 0;
 let soundOn = true;
+
+// The numbers currently shown in the header, so we only touch the page when they change.
+let shownScore = -1;
+let shownLevel = -1;
+
+// The stage width and the dinosaur's size and position. Measured once per run
+// (and when the window is resized) so the game loop never has to ask the
+// browser for layout, which is slow.
+const layout = { stageWidth: 0, dinoLeft: 0, dinoWidth: 0, dinoHeight: 0 };
 
 let topScores = loadScores();
 bestText.textContent = topScores[0]?.score ?? 0;
@@ -151,6 +176,7 @@ function startGame() {
   statusText.textContent = "Run started. Space or ↑ to jump, ↓ to duck.";
   renderLeaderboard(-1);
   updateScoreboard();
+  measureLayout();
 
   stage.focus();
   lastTime = performance.now();
@@ -209,9 +235,13 @@ function setDuck(held) {
 }
 
 // The dinosaur only crouches while it is running on the ground.
-// CSS squashes it with the is-ducking class, which also makes its hitbox smaller.
+function isDucking() {
+  return running && duckHeld && !jumping;
+}
+
+// CSS squashes the dinosaur with the is-ducking class.
 function updateDuckPose() {
-  dino.classList.toggle("is-ducking", running && duckHeld && !jumping);
+  dino.classList.toggle("is-ducking", isDucking());
 }
 
 function updateDino(deltaTime) {
@@ -219,8 +249,10 @@ function updateDino(deltaTime) {
 
   // Move up using velocity, then reduce that velocity using gravity.
   // Holding down in the air makes gravity stronger, so the dinosaur drops faster.
+  // Moving by the average speed over the frame keeps the jump the same height
+  // (exactly `jumpPeak`) whatever the frame rate.
   const pull = duckHeld ? gravity * fastFallMultiplier : gravity;
-  jumpHeight += jumpVelocity * deltaTime;
+  jumpHeight += (jumpVelocity - (pull * deltaTime) / 2) * deltaTime;
   jumpVelocity -= pull * deltaTime;
 
   // Stop the jump when the dinosaur reaches the ground again.
@@ -247,6 +279,7 @@ function startPowerUp(star) {
   graceTimeLeft = 0;
   dino.classList.add("is-powered");
   dino.classList.remove("is-power-ending");
+  powerFill.style.transform = "scaleX(1)";
   powerMeter.hidden = false;
   showToast("Power up! Smash everything!");
   statusText.textContent = "You're huge! Run through anything for a few seconds.";
@@ -256,7 +289,8 @@ function startPowerUp(star) {
 function updatePowerUp(deltaTime) {
   if (powerTimeLeft > 0) {
     powerTimeLeft = Math.max(0, powerTimeLeft - deltaTime);
-    powerFill.style.width = `${(powerTimeLeft / powerUp.duration) * 100}%`;
+    // scaleX is cheaper for the browser than changing the width every frame.
+    powerFill.style.transform = `scaleX(${powerTimeLeft / powerUp.duration})`;
     dino.classList.toggle("is-power-ending", powerTimeLeft < powerUp.warningTime);
 
     if (powerTimeLeft === 0) {
@@ -293,7 +327,7 @@ function smashObstacle(obstacle) {
 
 // ---------- Obstacles, eggs and stars ----------
 
-// Make a new element, put it at the right edge of the stage and remember it.
+// Make a new element, put it at x and remember it.
 function addObstacle(kind, emoji, name, size, bottom, x) {
   const el = document.createElement("div");
   el.className = `item ${kind}`;
@@ -310,6 +344,15 @@ function addObstacle(kind, emoji, name, size, bottom, x) {
   obstacleLayer.append(el);
 
   obstacles.push({ el, x, width: size, bottom, kind, name });
+}
+
+// Shortcuts for the two most common obstacles.
+function addFlyer(bottom, x) {
+  addObstacle("flyer", flyer.emoji, flyer.name, flyer.size, bottom, x);
+}
+
+function addHazard(hazard, x) {
+  addObstacle("hazard", hazard.emoji, hazard.name, hazard.size, groundHeight - 2, x);
 }
 
 // Take an obstacle out of the game. Smashed ones fly away before disappearing.
@@ -329,6 +372,11 @@ function obstacleSize(baseSize) {
   return Math.round(baseSize * growth);
 }
 
+function randomHazard() {
+  const hazard = hazards[Math.floor(Math.random() * hazards.length)];
+  return { ...hazard, size: obstacleSize(hazard.size) };
+}
+
 // How far to run before the next obstacle. Higher levels use less extra
 // space, so obstacles come more often. The `speed * 0.8` part is always
 // kept, because that is roughly how far the dinosaur travels in one jump.
@@ -339,12 +387,28 @@ function nextGap(extraWidth = 0) {
   return speed * 0.8 + extraWidth + extra + Math.random() * random;
 }
 
-// ---------- Pterodactyl heights ----------
+// ---------- Pterodactyl and star heights ----------
+// All heights are worked out from the dinosaur's hitbox, so the "must duck" and
+// "must jump" rules keep working if the dinosaur's size or the insets change.
 
-// Head height: hits a standing dinosaur, passes over a ducking one. Using the
-// dinosaur's real height keeps this working on small screens.
+// Top of a ducking dinosaur's hitbox.
+function duckTop() {
+  return groundHeight + layout.dinoHeight * duckScale.y * (1 - insets.dino);
+}
+
+// Bottom and top of the dinosaur's hitbox at the highest point of a jump.
+function peakBottom() {
+  return groundHeight + jumpPeak + layout.dinoHeight * insets.dino;
+}
+
+function peakTop() {
+  return groundHeight + jumpPeak + layout.dinoHeight * (1 - insets.dino);
+}
+
+// Head height: the bird's hitbox starts just above a ducking dinosaur,
+// so it hits a standing dinosaur but passes over a ducking one.
 function headHeight() {
-  return groundHeight + dino.offsetHeight * 0.42;
+  return duckTop() + birdClearance - flyer.size * insets.hazard;
 }
 
 // Skimming the ground: ducking does not help, you have to jump.
@@ -352,10 +416,16 @@ function lowHeight() {
   return groundHeight + 2;
 }
 
-// High up: only the very top of a jump would get above it. Stacked over a
-// head-height pterodactyl it blocks every jump, so you have to duck.
+// High up: the top of this bird's hitbox is just above the dinosaur's feet at
+// the top of a jump. No jump can clear it, so over a head-height bird it means
+// you have to duck.
 function highHeight() {
-  return groundHeight + jumpPeak - 20;
+  return peakBottom() + 4 - flyer.size * (1 - insets.hazard);
+}
+
+// The star: only the top few pixels of a perfect jump reach it.
+function starHeight() {
+  return peakTop() - powerUp.reach - powerUp.size * insets.pickup;
 }
 
 // ---------- Formations ----------
@@ -367,11 +437,6 @@ function formationChance() {
   return Math.min(formations.maxChance, levelsIn * formations.chancePerLevel);
 }
 
-function randomHazard() {
-  const hazard = hazards[Math.floor(Math.random() * hazards.length)];
-  return { ...hazard, size: obstacleSize(hazard.size) };
-}
-
 // Each formation adds its obstacles starting at x and returns how wide it is,
 // so the next spawn can wait until it has passed.
 const formationTypes = [
@@ -379,19 +444,20 @@ const formationTypes = [
     name: "low pair", // JUMP: two pterodactyls skimming the ground
     combo: false,
     spawn(x) {
-      addObstacle("flyer", flyer.emoji, flyer.name, flyer.size, lowHeight(), x);
-      addObstacle("flyer", flyer.emoji, flyer.name, flyer.size, lowHeight(), x + flyer.size * 1.1);
+      addFlyer(lowHeight(), x);
+      addFlyer(lowHeight(), x + flyer.size * 1.1);
       return flyer.size * 2.1;
     },
   },
   {
-    name: "stacked pair", // DUCK: one at head height, one high above and a bit behind
+    name: "stacked pair", // DUCK: one at head height, one straight above it
     combo: false,
     spawn(x) {
-      // The 40px offset closes the gap a jumping dinosaur could slip through.
-      addObstacle("flyer", flyer.emoji, flyer.name, flyer.size, headHeight(), x);
-      addObstacle("flyer", flyer.emoji, flyer.name, flyer.size, highHeight(), x + 40);
-      return flyer.size + 40;
+      // Exactly on top of each other: a jumping dinosaur passes the gap
+      // between them too quickly to fit through, and can't get above the top one.
+      addFlyer(headHeight(), x);
+      addFlyer(highHeight(), x);
+      return flyer.size;
     },
   },
   {
@@ -399,10 +465,10 @@ const formationTypes = [
     combo: true,
     spawn(x) {
       const hazard = randomHazard();
-      addObstacle("hazard", hazard.emoji, hazard.name, hazard.size, groundHeight - 2, x);
+      addHazard(hazard, x);
       // Leave about one jump's distance so there is time to land and duck.
       const birdX = x + hazard.size + speed * 0.75;
-      addObstacle("flyer", flyer.emoji, flyer.name, flyer.size, headHeight(), birdX);
+      addFlyer(headHeight(), birdX);
       return birdX - x + flyer.size;
     },
   },
@@ -410,11 +476,11 @@ const formationTypes = [
     name: "duck then jump", // a pterodactyl, then a ground obstacle right behind it
     combo: true,
     spawn(x) {
-      addObstacle("flyer", flyer.emoji, flyer.name, flyer.size, headHeight(), x);
+      addFlyer(headHeight(), x);
       // Just enough room to stand up after the bird passes and jump.
       const hazard = randomHazard();
       const hazardX = x + flyer.size + speed * 0.3 + 40;
-      addObstacle("hazard", hazard.emoji, hazard.name, hazard.size, groundHeight - 2, hazardX);
+      addHazard(hazard, hazardX);
       return hazardX - x + hazard.size;
     },
   },
@@ -422,9 +488,9 @@ const formationTypes = [
     name: "low bird and hazard", // JUMP: a low pterodactyl leading a ground obstacle
     combo: true,
     spawn(x) {
-      addObstacle("flyer", flyer.emoji, flyer.name, flyer.size, lowHeight(), x);
+      addFlyer(lowHeight(), x);
       const hazard = randomHazard();
-      addObstacle("hazard", hazard.emoji, hazard.name, hazard.size, groundHeight - 2, x + flyer.size * 0.9);
+      addHazard(hazard, x + flyer.size * 0.9);
       return flyer.size * 0.9 + hazard.size;
     },
   },
@@ -437,7 +503,7 @@ function spawnFormation(x) {
 }
 
 function spawnObstacles() {
-  const startX = stage.clientWidth + 20;
+  const startX = layout.stageWidth + 20;
 
   // From level 4, sometimes send a whole formation instead of one obstacle.
   if (Math.random() < formationChance()) {
@@ -448,15 +514,14 @@ function spawnObstacles() {
 
   // From level 2, sometimes send a pterodactyl instead of a ground obstacle.
   if (level >= flyer.fromLevel && Math.random() < flyer.chance) {
-    addObstacle("flyer", flyer.emoji, flyer.name, flyer.size, headHeight(), startX);
+    addFlyer(headHeight(), startX);
 
     // Sometimes the pterodactyl carries a star high above it. Only the top
     // few pixels of a jump reach it, so you must jump at exactly the right
     // moment: the top of your jump has to happen right above the bird.
     if (canSpawnPowerUp()) {
-      const starHeight = groundHeight + jumpPeak + dino.offsetHeight * 0.62;
       const starX = startX + (flyer.size - powerUp.size) / 2;
-      addObstacle("powerup", powerUp.emoji, powerUp.name, powerUp.size, starHeight, starX);
+      addObstacle("powerup", powerUp.emoji, powerUp.name, powerUp.size, starHeight(), starX);
       lastPowerUpScore = score;
     }
 
@@ -465,15 +530,13 @@ function spawnObstacles() {
   }
 
   const hazard = randomHazard();
-  const size = hazard.size;
-  addObstacle("hazard", hazard.emoji, hazard.name, size, groundHeight - 2, startX);
+  addHazard(hazard, startX);
   let groupWidth = 0;
 
   // From level 3, sometimes place a second hazard right behind the first.
   if (level >= 3 && Math.random() < 0.3) {
-    const extra = randomHazard();
-    addObstacle("hazard", extra.emoji, extra.name, extra.size, groundHeight - 2, startX + size * 0.8);
-    groupWidth = size * 0.8;
+    addHazard(randomHazard(), startX + hazard.size * 0.8);
+    groupWidth = hazard.size * 0.8;
   }
 
   // Sometimes float a golden egg above the hazard as a reward for jumping.
@@ -489,48 +552,77 @@ function updateObstacles(deltaTime) {
   distance += moved;
   distanceToNextSpawn -= moved;
 
-  // CSS reads --scroll to slide the ground and hills (see styles.css).
-  stage.style.setProperty("--scroll", distance.toFixed(1));
+  // CSS reads --scroll to slide the ground and hills (see styles.css). Setting
+  // it only on those layers means the rest of the stage is not restyled.
+  const scroll = distance.toFixed(1);
+  for (const layer of scrollLayers) layer.style.setProperty("--scroll", scroll);
 
   if (distanceToNextSpawn <= 0) spawnObstacles();
 
-  for (const obstacle of obstacles) {
+  // Move everything left in one pass, and drop anything that has left the screen.
+  obstacles = obstacles.filter((obstacle) => {
     obstacle.x -= moved;
+    if (obstacle.x < -obstacle.width - 20) {
+      obstacle.el.remove();
+      return false;
+    }
     obstacle.el.style.transform = `translateX(${obstacle.x}px)`;
-  }
-
-  // Remove anything that has left the screen on the left side.
-  for (const obstacle of [...obstacles]) {
-    if (obstacle.x < -obstacle.width - 20) removeObstacle(obstacle);
-  }
+    return true;
+  });
 }
 
 // ---------- Collision ----------
 
-// Emoji have empty space around them, so shrink each box before comparing.
-function getHitbox(el, inset) {
-  const box = el.getBoundingClientRect();
+// Measure the stage and the dinosaur. Only called at the start of a run and
+// on resize, never inside the game loop.
+function measureLayout() {
+  layout.stageWidth = stage.clientWidth;
+  layout.dinoLeft = dino.offsetLeft;
+  layout.dinoWidth = dino.offsetWidth;
+  layout.dinoHeight = dino.offsetHeight;
+}
+
+// A box measured from the stage floor: left/right in pixels from the left
+// edge, bottom/top in pixels up from the bottom. `inset` shrinks every side.
+function makeHitbox(left, bottom, width, height, inset) {
   return {
-    left: box.left + box.width * inset,
-    right: box.right - box.width * inset,
-    top: box.top + box.height * inset,
-    bottom: box.bottom - box.height * inset,
+    left: left + width * inset,
+    right: left + width * (1 - inset),
+    bottom: bottom + height * inset,
+    top: bottom + height * (1 - inset),
   };
 }
 
+// The dinosaur's hitbox comes from the game's own numbers instead of the page,
+// so running and jump animations can't change whether you crash.
+function dinoHitbox() {
+  const ducking = isDucking();
+  const power = powerTimeLeft > 0 ? powerScale : 1;
+  const width = layout.dinoWidth * (ducking ? duckScale.x : 1) * power;
+  const height = layout.dinoHeight * (ducking ? duckScale.y : 1) * power;
+  // CSS scales the dinosaur from its feet (transform-origin: 50% 100%).
+  const left = layout.dinoLeft + (layout.dinoWidth - width) / 2;
+  return makeHitbox(left, groundHeight + jumpHeight, width, height, insets.dino);
+}
+
+function obstacleHitbox(obstacle) {
+  const pickup = obstacle.kind === "egg" || obstacle.kind === "powerup";
+  const inset = pickup ? insets.pickup : insets.hazard;
+  return makeHitbox(obstacle.x, obstacle.bottom, obstacle.width, obstacle.width, inset);
+}
+
 function boxesOverlap(a, b) {
-  return a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+  return a.left < b.right && a.right > b.left && a.bottom < b.top && a.top > b.bottom;
 }
 
 // Returns the obstacle that ends the run, or null.
 // Eggs and stars are collected on touch. A powered-up dinosaur smashes obstacles.
 function checkCollisions() {
-  const dinoBox = getHitbox(dino, 0.24);
+  const dinoBox = dinoHitbox();
 
-  for (const obstacle of [...obstacles]) {
-    const pickup = obstacle.kind === "egg" || obstacle.kind === "powerup";
-    const inset = pickup ? 0.1 : 0.2;
-    if (!boxesOverlap(dinoBox, getHitbox(obstacle.el, inset))) continue;
+  // removeObstacle() makes a new array, so it is safe to loop over this one.
+  for (const obstacle of obstacles) {
+    if (!boxesOverlap(dinoBox, obstacleHitbox(obstacle))) continue;
 
     if (obstacle.kind === "egg") {
       collectEgg(obstacle);
@@ -570,9 +662,17 @@ function updateScore(deltaTime) {
   updateScoreboard();
 }
 
+// Only touch the page when the shown number actually changes.
 function updateScoreboard() {
-  scoreText.textContent = Math.floor(score);
-  levelText.textContent = level;
+  const wholeScore = Math.floor(score);
+  if (wholeScore !== shownScore) {
+    scoreText.textContent = wholeScore;
+    shownScore = wholeScore;
+  }
+  if (level !== shownLevel) {
+    levelText.textContent = level;
+    shownLevel = level;
+  }
 }
 
 function showToast(message) {
@@ -742,10 +842,15 @@ soundButton.addEventListener("click", () => {
   soundButton.setAttribute("aria-label", soundOn ? "Sound on" : "Sound off");
 });
 
+// The screen size can change the dinosaur's size (see the phone styles), so measure again.
+window.addEventListener("resize", measureLayout);
+
 // Space and Arrow Up jump. Arrow Down (or S) ducks while it is held.
 document.addEventListener("keydown", (event) => {
   if (event.code === "ArrowDown" || event.code === "KeyS") {
-    // Prevent Arrow Down from scrolling the page.
+    // Only take over the key during a run, so ↓ still scrolls the page
+    // (for example down to the scoreboard) when you are not playing.
+    if (!running) return;
     event.preventDefault();
     setDuck(true);
     return;
