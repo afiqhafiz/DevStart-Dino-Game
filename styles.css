@@ -1,16 +1,26 @@
-/* Use border-box so width and height include padding and borders. */
 * {
   box-sizing: border-box;
 }
 
-body {
-  margin: 0;
-  color: #000;
-  background: #fff;
-  font-family: Arial, sans-serif;
+:root {
+  --pink: #edc9d4;
+  --peach: #ffd3c9;
+  --cream: #fff7cf;
+  --green: #e4f0c9;
+  --blue: #c7e0ff;
+  --lilac: #cfcfff;
+  --peri: #bac3ff;
+  --plum: #5b4a66;
 }
 
-/* Keep the page centred and stop it from becoming too wide. */
+body {
+  margin: 0;
+  color: var(--plum);
+  background: linear-gradient(180deg, var(--pink), var(--lilac));
+  font-family: "Segoe UI", ui-rounded, system-ui, sans-serif;
+  min-height: 100vh;
+}
+
 .page-shell {
   width: min(900px, calc(100% - 32px));
   margin: 0 auto;
@@ -28,28 +38,44 @@ p {
   margin-top: 0;
 }
 
+.session-label {
+  display: inline-block;
+  margin-bottom: 12px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: var(--lilac);
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
 h1 {
   margin-bottom: 8px;
   font-size: 3rem;
+  letter-spacing: -0.02em;
 }
 
-/* The outer border shows the size of the complete game. */
 .game-card {
-  border: 2px solid #000;
+  border: 2px solid var(--lilac);
+  border-radius: 24px;
+  background: var(--cream);
+  box-shadow: 0 14px 34px rgba(91, 74, 102, 0.18);
+  overflow: hidden;
 }
 
-/* Flexbox places the title on the left and score on the right. */
 .scoreboard,
 .controls {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  padding: 16px;
+  padding: 16px 20px;
 }
 
 .scoreboard {
-  border-bottom: 2px solid #000;
+  border-bottom: 2px solid var(--lilac);
+  background: var(--pink);
 }
 
 .scoreboard h2,
@@ -58,28 +84,31 @@ h1 {
   margin-bottom: 0;
 }
 
-/* Relative positioning makes this the reference box for the game objects. */
+.scoreboard h2 {
+  letter-spacing: -0.01em;
+}
+
 .game-stage {
   position: relative;
   height: 320px;
   overflow: hidden;
-  background: #fff;
+  background: linear-gradient(180deg, var(--blue) 0%, var(--blue) 70%, #d9ebff 100%);
   outline: none;
 }
 
 .game-stage:focus-visible {
-  outline: 3px dashed #000;
-  outline-offset: -6px;
+  outline: 3px dashed var(--peri);
+  outline-offset: -8px;
 }
 
-/* Absolute positioning attaches the ground to the bottom of the stage. */
 .ground {
   position: absolute;
   right: 0;
   bottom: 0;
   left: 0;
   height: 42px;
-  border-top: 2px solid #000;
+  border-top: 2px solid var(--peri);
+  background: var(--green);
 }
 
 .dino,
@@ -89,19 +118,65 @@ h1 {
   display: grid;
   place-items: center;
   user-select: none;
+  filter: drop-shadow(0 4px 6px rgba(91, 74, 102, 0.25));
 }
 
-/* The dinosaur stays near the left and sits above the 42px ground. */
 .dino {
   left: 12%;
   bottom: 42px;
-  width: 76px;
-  height: 76px;
-  font-size: 3.8rem;
-  transform: scaleX(-1);
+  width: 80px;
+  height: 80px;
 }
 
-/* JavaScript changes left while bottom keeps the obstacle on the ground. */
+.dino svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.dino.running .dino-art {
+  animation: dino-bob 0.28s steps(2, end) infinite;
+}
+
+.dino.running .dino-leg-back {
+  animation: leg-back 0.28s steps(2, end) infinite;
+}
+
+.dino.running .dino-leg-front {
+  animation: leg-front 0.28s steps(2, end) infinite;
+}
+
+@keyframes dino-bob {
+  0% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(-2px);
+  }
+}
+
+@keyframes leg-back {
+  0% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(-2px);
+  }
+}
+
+@keyframes leg-front {
+  0% {
+    transform: translateY(-2px);
+  }
+
+  50% {
+    transform: translateY(0);
+  }
+}
+
 .obstacle {
   bottom: 42px;
   left: calc(100% + 60px);
@@ -110,14 +185,14 @@ h1 {
   font-size: 3rem;
 }
 
-/* The clouds are simple examples of absolute top and left positions. */
 .cloud {
   position: absolute;
   width: 90px;
   height: 28px;
-  border: 2px solid #000;
-  border-radius: 50%;
-  background: #fff;
+  border: 2px solid var(--lilac);
+  border-radius: 999px;
+  background: var(--cream);
+  opacity: 0.9;
 }
 
 .cloud-one {
@@ -134,32 +209,37 @@ h1 {
 
 .controls {
   min-height: 76px;
-  border-top: 2px solid #000;
+  border-top: 2px solid var(--lilac);
+  background: var(--peach);
 }
 
 button {
   flex: 0 0 auto;
-  border: 2px solid #000;
-  padding: 10px 16px;
-  color: #000;
-  background: #fff;
+  border: none;
+  border-radius: 999px;
+  padding: 12px 24px;
+  color: var(--plum);
+  background: var(--peri);
   font: inherit;
-  font-weight: bold;
+  font-weight: 700;
   cursor: pointer;
+  transition: background 160ms ease, transform 160ms ease;
 }
 
-button:hover,
-button:focus-visible {
-  color: #fff;
-  background: #000;
+button:hover {
+  background: var(--lilac);
+  transform: translateY(-1px);
+}
+
+button:active {
+  transform: translateY(0) scale(0.97);
 }
 
 button:focus-visible {
-  outline: 3px solid #000;
+  outline: 3px solid var(--peri);
   outline-offset: 3px;
 }
 
-/* Stack the controls when there is not enough horizontal space. */
 @media (max-width: 620px) {
   .scoreboard,
   .controls {
