@@ -1,3 +1,21 @@
+/* Colours used across the page. Change them here to restyle everything. */
+:root {
+  --page: #140f26;
+  --card: #221a3d;
+  --panel: #2c2350;
+  --border: #3d3266;
+  --text: #f5f0ff;
+  --muted: #b9add9;
+  --accent: #ffb347;
+  --accent-hover: #ffc061;
+  --accent-text: #2a1600;
+  --radius: 8px;
+  --radius-large: 12px;
+  --grass: #65cb36;
+  --grass-dark: #2e6b14;
+  --dirt: #8b5a2b;
+}
+
 /* Use border-box so width and height include padding and borders. */
 * {
   box-sizing: border-box;
@@ -5,9 +23,10 @@
 
 body {
   margin: 0;
-  color: #000;
-  background: #fff;
-  font-family: Arial, sans-serif;
+  min-height: 100vh;
+  color: var(--text);
+  background: var(--page);
+  font-family: "Fredoka", "Trebuchet MS", Arial, sans-serif;
 }
 
 /* Keep the page centred and stop it from becoming too wide. */
@@ -28,66 +47,280 @@ p {
   margin-top: 0;
 }
 
+.session-label {
+  margin-bottom: 8px;
+  color: var(--accent);
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
 h1 {
   margin-bottom: 8px;
-  font-size: 3rem;
+  font-size: clamp(2.4rem, 7vw, 3.6rem);
+  line-height: 1.05;
 }
 
-/* The outer border shows the size of the complete game. */
+.intro p:last-child {
+  color: var(--muted);
+}
+
+/* The card holds the scoreboard, the game and the controls. */
 .game-card {
-  border: 2px solid #000;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-large);
+  background: var(--card);
 }
 
-/* Flexbox places the title on the left and score on the right. */
+/* Flexbox places the title on the left and the stats on the right. */
 .scoreboard,
 .controls {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  padding: 16px;
+  padding: 14px 18px;
 }
 
-.scoreboard {
-  border-bottom: 2px solid #000;
-}
-
-.scoreboard h2,
-.scoreboard p,
-.controls p {
+.scoreboard h2 {
   margin-bottom: 0;
+  font-size: 1.3rem;
 }
 
-/* Relative positioning makes this the reference box for the game objects. */
+/* Plain label + number pairs, spaced apart. */
+.stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 24px;
+}
+
+.stat {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.stat strong {
+  margin-left: 4px;
+  color: var(--text);
+  font-size: 1.05rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.stat-score strong {
+  color: var(--accent);
+}
+
+/* ---------- The game stage ---------- */
+
+/* Relative positioning makes this the reference box for the game objects.
+   JavaScript updates --scroll as the dinosaur runs. */
 .game-stage {
+  --scroll: 0;
   position: relative;
   height: 320px;
   overflow: hidden;
-  background: #fff;
   outline: none;
+  cursor: pointer;
+  user-select: none;
+  touch-action: manipulation;
 }
 
 .game-stage:focus-visible {
-  outline: 3px dashed #000;
-  outline-offset: -6px;
+  box-shadow: inset 0 0 0 3px #fff;
 }
 
-/* Absolute positioning attaches the ground to the bottom of the stage. */
+/* Three skies are stacked. Only the one matching data-phase is visible. */
+.sky {
+  position: absolute;
+  inset: 0;
+  transition: opacity 1.5s ease;
+}
+
+.sky-day {
+  background: linear-gradient(#5f64c6, #9a9ef2 60%, #ffd6a5);
+}
+
+.sky-sunset {
+  opacity: 0;
+  background: linear-gradient(#3a2a78, #c45b8a 55%, #ffb347);
+}
+
+.sky-night {
+  opacity: 0;
+  background: linear-gradient(#0b0820, #231a4a 70%, #3a2a6e);
+}
+
+/* One tiny dot copied many times with box-shadow makes the stars. */
+.sky-night::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 2px;
+  height: 2px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow:
+    40px 30px #fff, 120px 80px #fffa, 210px 22px #fff, 300px 60px #fff8,
+    380px 18px #fff, 460px 95px #fffa, 540px 40px #fff, 620px 75px #fff8,
+    700px 25px #fff, 780px 100px #fffa, 840px 50px #fff, 160px 140px #fff8,
+    500px 150px #fff8, 260px 120px #fffa, 660px 140px #fff8;
+  animation: twinkle 2.5s ease-in-out infinite alternate;
+}
+
+.game-stage[data-phase="sunset"] .sky-sunset,
+.game-stage[data-phase="night"] .sky-night {
+  opacity: 1;
+}
+
+/* The sun moves down at sunset and turns into a moon at night. */
+.sun {
+  position: absolute;
+  top: 34px;
+  right: 12%;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: #ffe08a;
+  box-shadow: 0 0 40px 10px rgba(255, 224, 138, 0.6);
+  transition: all 1.5s ease;
+}
+
+.game-stage[data-phase="sunset"] .sun {
+  top: 120px;
+  background: #ff9a5a;
+  box-shadow: 0 0 50px 16px rgba(255, 140, 90, 0.55);
+}
+
+.game-stage[data-phase="night"] .sun {
+  top: 40px;
+  width: 44px;
+  height: 44px;
+  background: #f4f1ff;
+  box-shadow:
+    inset -12px -4px 0 0 #cfc6ef,
+    0 0 30px 6px rgba(220, 220, 255, 0.35);
+}
+
+/* Clouds drift on their own, slower than the ground. */
+.cloud {
+  position: absolute;
+  left: 100%;
+  width: 90px;
+  height: 26px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.9);
+  animation: drift linear infinite;
+  transition: opacity 1.5s ease;
+}
+
+.cloud::before,
+.cloud::after {
+  content: "";
+  position: absolute;
+  border-radius: 50%;
+  background: inherit;
+}
+
+.cloud::before {
+  top: -22px;
+  left: 14px;
+  width: 44px;
+  height: 44px;
+}
+
+.cloud::after {
+  top: -14px;
+  left: 46px;
+  width: 32px;
+  height: 32px;
+}
+
+.cloud-one {
+  top: 64px;
+  animation-duration: 28s;
+}
+
+.cloud-two {
+  top: 118px;
+  animation-duration: 40s;
+  animation-delay: -18s;
+  opacity: 0.75;
+}
+
+.cloud-three {
+  top: 40px;
+  animation-duration: 34s;
+  animation-delay: -8s;
+  opacity: 0.6;
+}
+
+.game-stage[data-phase="night"] .cloud {
+  opacity: 0.2;
+}
+
+/* Hills repeat sideways. Multiplying --scroll by a small number makes far
+   hills move slowly and near hills move faster (a parallax effect). */
+.hills {
+  position: absolute;
+  right: 0;
+  bottom: 40px;
+  left: 0;
+  pointer-events: none;
+  transition: filter 1.5s ease;
+}
+
+.hills-far {
+  height: 120px;
+  background: radial-gradient(ellipse 160px 110px at 50% 100%, #4a3f9a 98%, transparent 100%)
+    0 100% / 300px 120px repeat-x;
+  background-position-x: calc(var(--scroll) * -0.15px);
+  opacity: 0.85;
+}
+
+.hills-near {
+  height: 80px;
+  background: radial-gradient(ellipse 110px 80px at 50% 100%, #2f8a4a 98%, transparent 100%)
+    0 100% / 210px 80px repeat-x;
+  background-position-x: calc(var(--scroll) * -0.4px + 90px);
+}
+
+.game-stage[data-phase="sunset"] .hills {
+  filter: brightness(0.8) saturate(1.2) hue-rotate(-15deg);
+}
+
+.game-stage[data-phase="night"] .hills {
+  filter: brightness(0.45) saturate(0.7);
+}
+
+/* Absolute positioning attaches the ground to the bottom of the stage.
+   The stripes move at full speed using --scroll. */
 .ground {
   position: absolute;
   right: 0;
   bottom: 0;
   left: 0;
+  z-index: 3;
   height: 42px;
-  border-top: 2px solid #000;
+  border-top: 3px solid var(--grass-dark);
+  background:
+    repeating-linear-gradient(90deg, transparent 0 28px, rgba(0, 0, 0, 0.14) 28px 34px),
+    linear-gradient(var(--grass) 0 9px, var(--dirt) 9px);
+  background-position-x: calc(var(--scroll) * -1px), 0;
 }
 
+/* ---------- Dinosaur, obstacles and eggs ---------- */
+
 .dino,
-.obstacle {
+.item {
   position: absolute;
-  z-index: 2;
+  z-index: 4;
   display: grid;
   place-items: center;
+  line-height: 1;
   user-select: none;
 }
 
@@ -95,79 +328,292 @@ h1 {
 .dino {
   left: 12%;
   bottom: 42px;
-  width: 76px;
-  height: 76px;
+  width: 80px;
+  height: 70px;
   font-size: 3.8rem;
   transform: scaleX(-1);
+  /* Scale and rotate from the feet so the dinosaur stays on the ground. */
+  transform-origin: 50% 100%;
+  filter: drop-shadow(0 4px 0 rgba(0, 0, 0, 0.25));
 }
 
-/* JavaScript changes left while bottom keeps the obstacle on the ground. */
-.obstacle {
-  bottom: 42px;
-  left: calc(100% + 60px);
-  width: 56px;
-  height: 56px;
-  font-size: 3rem;
+/* A small bounce while running on the ground. */
+.is-running .dino:not(.is-jumping, .is-ducking) {
+  animation: run 0.3s steps(2) infinite;
 }
 
-/* The clouds are simple examples of absolute top and left positions. */
-.cloud {
+.dino.is-jumping {
+  transform: scaleX(-1) rotate(12deg);
+}
+
+/* Crouching: wider and much shorter. Because the box really gets smaller,
+   the collision check in app.js lets pterodactyls fly over it. */
+.dino.is-ducking {
+  transform: scaleX(-1.15) scaleY(0.55);
+}
+
+.is-running .dino.is-ducking {
+  animation: duck-run 0.3s steps(2) infinite;
+}
+
+.dino.is-hit {
+  transform: scaleX(-1) rotate(-25deg);
+  filter: grayscale(1) drop-shadow(0 4px 0 rgba(0, 0, 0, 0.25));
+}
+
+/* JavaScript moves each item with translateX. */
+.item {
+  left: 0;
+  will-change: transform;
+  filter: drop-shadow(0 3px 0 rgba(0, 0, 0, 0.25));
+}
+
+.item.egg {
+  filter: drop-shadow(0 0 10px #ffd86b);
+}
+
+.item.egg span {
+  animation: bob 0.7s ease-in-out infinite alternate;
+}
+
+/* Pterodactyls flap their wings. Only the emoji inside moves,
+   so the hitbox (the outer box) stays steady. */
+.item.flyer span {
+  animation: flap 0.3s steps(2) infinite;
+}
+
+.item.is-hit {
+  filter: drop-shadow(0 0 12px #ff3b3b);
+}
+
+/* "+25" floats up and fades when an egg is collected. */
+.popup {
   position: absolute;
-  width: 90px;
-  height: 28px;
-  border: 2px solid #000;
-  border-radius: 50%;
-  background: #fff;
+  z-index: 6;
+  color: #ffe08a;
+  font-size: 1.3rem;
+  font-weight: 700;
+  text-shadow: 0 2px 0 #7a4b00;
+  pointer-events: none;
+  animation: float-up 0.8s ease-out forwards;
 }
 
-.cloud-one {
-  top: 50px;
-  left: 48%;
+/* "Level 2!" message at the top of the stage. */
+.toast {
+  position: absolute;
+  top: 18px;
+  left: 50%;
+  z-index: 6;
+  margin: 0;
+  padding: 6px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--accent);
+  background: var(--panel);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  opacity: 0;
+  translate: -50% 0;
+  pointer-events: none;
 }
 
-.cloud-two {
-  top: 110px;
-  left: 72%;
-  width: 64px;
-  height: 22px;
+.toast.show {
+  animation: toast 1.8s ease forwards;
 }
+
+/* ---------- Start and game over panel ---------- */
+
+.overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 7;
+  display: grid;
+  place-items: center;
+  /* A plain dark scrim (no blur) so the panel text is easy to read. */
+  background: rgba(20, 15, 38, 0.6);
+}
+
+.overlay[hidden] {
+  display: none;
+}
+
+.overlay-panel {
+  max-width: min(340px, 86%);
+  padding: 20px 24px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-large);
+  text-align: center;
+  background: var(--panel);
+  animation: pop 0.25s ease-out;
+}
+
+.overlay-panel h3 {
+  margin: 0 0 4px;
+  font-size: 1.5rem;
+}
+
+.overlay-panel p {
+  margin-bottom: 16px;
+  color: var(--muted);
+}
+
+/* The whole stage shakes after a crash. */
+.game-stage.is-shaking {
+  animation: shake 0.4s;
+}
+
+/* ---------- Controls ---------- */
 
 .controls {
-  min-height: 76px;
-  border-top: 2px solid #000;
+  min-height: 72px;
+  border-top: 1px solid var(--border);
 }
 
+.controls p {
+  flex: 1;
+  margin-bottom: 0;
+  color: var(--muted);
+}
+
+/* Primary buttons: one solid accent colour. */
 button {
   flex: 0 0 auto;
-  border: 2px solid #000;
-  padding: 10px 16px;
-  color: #000;
-  background: #fff;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  padding: 10px 18px;
+  color: var(--accent-text);
+  background: var(--accent);
   font: inherit;
-  font-weight: bold;
+  font-weight: 700;
   cursor: pointer;
+  transition: background-color 0.15s, transform 0.1s;
 }
 
-button:hover,
-button:focus-visible {
-  color: #fff;
-  background: #000;
+button:hover {
+  background: var(--accent-hover);
+}
+
+button:active {
+  transform: translateY(1px);
 }
 
 button:focus-visible {
-  outline: 3px solid #000;
+  outline: 3px solid #fff;
   outline-offset: 3px;
+}
+
+/* Secondary buttons: outlined, no fill. */
+.icon-button {
+  padding: 8px 12px;
+  border-color: var(--border);
+  color: var(--text);
+  background: transparent;
+}
+
+.icon-button:hover {
+  background: var(--panel);
+}
+
+/* Hold-to-duck button for touch screens. Stop long-press menus and text selection. */
+.duck-button {
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+/* With a mouse and keyboard you can use ↓, so hide the button there. */
+@media (hover: hover) and (pointer: fine) {
+  .duck-button {
+    display: none;
+  }
+}
+
+/* ---------- Animations ---------- */
+
+@keyframes run {
+  50% { transform: scaleX(-1) translateY(-4px); }
+}
+
+@keyframes duck-run {
+  50% { transform: scaleX(-1.15) scaleY(0.55) translateY(-3px); }
+}
+
+@keyframes flap {
+  50% { transform: translateY(-4px) scaleY(0.8); }
+}
+
+@keyframes bob {
+  to { transform: translateY(-8px); }
+}
+
+@keyframes drift {
+  from { left: 100%; }
+  to { left: -140px; }
+}
+
+@keyframes twinkle {
+  to { opacity: 0.5; }
+}
+
+@keyframes float-up {
+  to { opacity: 0; transform: translateY(-40px); }
+}
+
+@keyframes toast {
+  0% { opacity: 0; transform: translateY(-10px) scale(0.9); }
+  15%, 75% { opacity: 1; transform: none; }
+  100% { opacity: 0; }
+}
+
+@keyframes pop {
+  from { opacity: 0; transform: scale(0.96); }
+}
+
+@keyframes shake {
+  20% { translate: -6px 0; }
+  40% { translate: 6px 0; }
+  60% { translate: -4px 0; }
+  80% { translate: 3px 0; }
 }
 
 /* Stack the controls when there is not enough horizontal space. */
 @media (max-width: 620px) {
-  .scoreboard,
-  .controls {
+  .scoreboard {
     align-items: flex-start;
     flex-direction: column;
   }
 
+  .controls {
+    flex-wrap: wrap;
+  }
+
+  .controls p {
+    order: 3;
+    flex-basis: 100%;
+  }
+
   .game-stage {
     height: 260px;
+  }
+
+  .dino {
+    width: 64px;
+    height: 56px;
+    font-size: 3rem;
+  }
+}
+
+/* Respect people who ask their device for less motion. */
+@media (prefers-reduced-motion: reduce) {
+  .cloud,
+  .sky-night::before,
+  .item.egg span,
+  .item.flyer span,
+  .is-running .dino:not(.is-jumping, .is-ducking),
+  .is-running .dino.is-ducking,
+  .game-stage.is-shaking {
+    animation: none;
   }
 }
