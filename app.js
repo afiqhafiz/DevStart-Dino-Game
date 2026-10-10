@@ -51,6 +51,16 @@ const spacing = { extra: 220, extraMin: 70, random: 240, randomMin: 90, shrinkPe
 // The flying obstacle. It flies at head height, so the dinosaur must duck.
 const flyer = { emoji: "🦅", name: "pterodactyl", size: 50, fromLevel: 2, chance: 0.3 };
 
+// Formations: groups of pterodactyls (sometimes mixed with ground obstacles)
+// that force a particular move. They start at `fromLevel`, become more likely
+// every level, and never take more than `maxChance` of all spawns.
+const formations = {
+  fromLevel: 4,
+  comboFromLevel: 6, // pterodactyl + cactus/rock/log combos start here
+  chancePerLevel: 0.06,
+  maxChance: 0.5,
+};
+
 // The power-up. It floats at the top of a jump, right above a pterodactyl,
 // so grabbing it means timing a jump over the bird.
 const powerUp = {
@@ -329,16 +339,116 @@ function nextGap(extraWidth = 0) {
   return speed * 0.8 + extraWidth + extra + Math.random() * random;
 }
 
+// ---------- Pterodactyl heights ----------
+
+// Head height: hits a standing dinosaur, passes over a ducking one. Using the
+// dinosaur's real height keeps this working on small screens.
+function headHeight() {
+  return groundHeight + dino.offsetHeight * 0.42;
+}
+
+// Skimming the ground: ducking does not help, you have to jump.
+function lowHeight() {
+  return groundHeight + 2;
+}
+
+// High up: only the very top of a jump would get above it. Stacked over a
+// head-height pterodactyl it blocks every jump, so you have to duck.
+function highHeight() {
+  return groundHeight + jumpPeak - 20;
+}
+
+// ---------- Formations ----------
+
+// How likely a formation is at the current level (0 = never, 0.5 = half the time).
+function formationChance() {
+  if (level < formations.fromLevel) return 0;
+  const levelsIn = level - formations.fromLevel + 1;
+  return Math.min(formations.maxChance, levelsIn * formations.chancePerLevel);
+}
+
+function randomHazard() {
+  const hazard = hazards[Math.floor(Math.random() * hazards.length)];
+  return { ...hazard, size: obstacleSize(hazard.size) };
+}
+
+// Each formation adds its obstacles starting at x and returns how wide it is,
+// so the next spawn can wait until it has passed.
+const formationTypes = [
+  {
+    name: "low pair", // JUMP: two pterodactyls skimming the ground
+    combo: false,
+    spawn(x) {
+      addObstacle("flyer", flyer.emoji, flyer.name, flyer.size, lowHeight(), x);
+      addObstacle("flyer", flyer.emoji, flyer.name, flyer.size, lowHeight(), x + flyer.size * 1.1);
+      return flyer.size * 2.1;
+    },
+  },
+  {
+    name: "stacked pair", // DUCK: one at head height, one high above and a bit behind
+    combo: false,
+    spawn(x) {
+      // The 40px offset closes the gap a jumping dinosaur could slip through.
+      addObstacle("flyer", flyer.emoji, flyer.name, flyer.size, headHeight(), x);
+      addObstacle("flyer", flyer.emoji, flyer.name, flyer.size, highHeight(), x + 40);
+      return flyer.size + 40;
+    },
+  },
+  {
+    name: "jump then duck", // a ground obstacle, then a pterodactyl after you land
+    combo: true,
+    spawn(x) {
+      const hazard = randomHazard();
+      addObstacle("hazard", hazard.emoji, hazard.name, hazard.size, groundHeight - 2, x);
+      // Leave about one jump's distance so there is time to land and duck.
+      const birdX = x + hazard.size + speed * 0.75;
+      addObstacle("flyer", flyer.emoji, flyer.name, flyer.size, headHeight(), birdX);
+      return birdX - x + flyer.size;
+    },
+  },
+  {
+    name: "duck then jump", // a pterodactyl, then a ground obstacle right behind it
+    combo: true,
+    spawn(x) {
+      addObstacle("flyer", flyer.emoji, flyer.name, flyer.size, headHeight(), x);
+      // Just enough room to stand up after the bird passes and jump.
+      const hazard = randomHazard();
+      const hazardX = x + flyer.size + speed * 0.3 + 40;
+      addObstacle("hazard", hazard.emoji, hazard.name, hazard.size, groundHeight - 2, hazardX);
+      return hazardX - x + hazard.size;
+    },
+  },
+  {
+    name: "low bird and hazard", // JUMP: a low pterodactyl leading a ground obstacle
+    combo: true,
+    spawn(x) {
+      addObstacle("flyer", flyer.emoji, flyer.name, flyer.size, lowHeight(), x);
+      const hazard = randomHazard();
+      addObstacle("hazard", hazard.emoji, hazard.name, hazard.size, groundHeight - 2, x + flyer.size * 0.9);
+      return flyer.size * 0.9 + hazard.size;
+    },
+  },
+];
+
+function spawnFormation(x) {
+  const unlocked = formationTypes.filter((type) => !type.combo || level >= formations.comboFromLevel);
+  const type = unlocked[Math.floor(Math.random() * unlocked.length)];
+  return type.spawn(x);
+}
+
 function spawnObstacles() {
   const startX = stage.clientWidth + 20;
 
+  // From level 4, sometimes send a whole formation instead of one obstacle.
+  if (Math.random() < formationChance()) {
+    const width = spawnFormation(startX);
+    distanceToNextSpawn = nextGap(width);
+    return;
+  }
+
   // From level 2, sometimes send a pterodactyl instead of a ground obstacle.
   if (level >= flyer.fromLevel && Math.random() < flyer.chance) {
-    // Fly at the dinosaur's head height: low enough to hit it when standing,
-    // high enough to pass over it when it ducks. Using the dinosaur's real
-    // height keeps this working on small screens where the dinosaur is smaller.
-    const flyHeight = groundHeight + dino.offsetHeight * 0.42;
-    addObstacle("flyer", flyer.emoji, flyer.name, flyer.size, flyHeight, startX);
+    addObstacle("flyer", flyer.emoji, flyer.name, flyer.size, headHeight(), startX);
 
     // Sometimes the pterodactyl carries a star high above it. Only the top
     // few pixels of a jump reach it, so you must jump at exactly the right
@@ -354,16 +464,15 @@ function spawnObstacles() {
     return;
   }
 
-  const hazard = hazards[Math.floor(Math.random() * hazards.length)];
-  const size = obstacleSize(hazard.size);
+  const hazard = randomHazard();
+  const size = hazard.size;
   addObstacle("hazard", hazard.emoji, hazard.name, size, groundHeight - 2, startX);
   let groupWidth = 0;
 
   // From level 3, sometimes place a second hazard right behind the first.
   if (level >= 3 && Math.random() < 0.3) {
-    const extra = hazards[Math.floor(Math.random() * hazards.length)];
-    const extraSize = obstacleSize(extra.size);
-    addObstacle("hazard", extra.emoji, extra.name, extraSize, groundHeight - 2, startX + size * 0.8);
+    const extra = randomHazard();
+    addObstacle("hazard", extra.emoji, extra.name, extra.size, groundHeight - 2, startX + size * 0.8);
     groupWidth = size * 0.8;
   }
 
